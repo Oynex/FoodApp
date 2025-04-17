@@ -1,8 +1,8 @@
 task: detect
 mode: train
-model: yolov8s.pt
-data: C:\Intern\FoodApp\data\UEC_Food_100\yolo\data.yaml
-epochs: 1
+model: C:/Intern/FoodApp/saved/yolov8_uec_food100/weights/last.pt
+data: C:/Intern/FoodApp/data/UEC_Food_100/yolo/data.yaml
+epochs: 10
 time: null
 patience: 100
 batch: 10
@@ -12,7 +12,7 @@ save_period: -1
 cache: false
 device: null
 workers: 8
-project: saved
+project: C:/Intern/FoodApp/saved
 name: yolov8_uec_food100
 exist_ok: true
 pretrained: true
@@ -101,4 +101,4 @@ auto_augment: randaugment
 erasing: 0.4
 cfg: null
 tracker: botsort.yaml
-save_dir: saved\yolov8_uec_food100
+save_dir: C:\Intern\FoodApp\saved\yolov8_uec_food100

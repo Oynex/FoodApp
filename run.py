@@ -3,7 +3,7 @@ import cv2
 
 if __name__ == '__main__':
     # Load the trained model
-    model = YOLO('saved/yolov8_uec_food100/weights/best.pt')
+    model = YOLO('C:/Intern/FoodApp/saved/yolov8_uec_food100/weights/best.pt')
 
     # Open the webcam
     cap = cv2.VideoCapture(0)
