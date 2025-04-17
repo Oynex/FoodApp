@@ -2,10 +2,10 @@ task: detect
 mode: train
 model: yolov8s.pt
 data: f:/REPO/FoodApp/data/UEC_Food_100/yolo/data.yaml
-epochs: 100
+epochs: 1
 time: null
 patience: 100
-batch: 16
+batch: 10
 imgsz: 640
 save: true
 save_period: -1
