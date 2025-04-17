@@ -1,7 +1,7 @@
 task: detect
 mode: train
 model: yolov8s.pt
-data: f:/REPO/FoodApp/data/UEC_Food_100/yolo/data.yaml
+data: C:\Intern\FoodApp\data\UEC_Food_100\yolo\data.yaml
 epochs: 1
 time: null
 patience: 100
