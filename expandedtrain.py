@@ -3,6 +3,9 @@ import torch
 import os
 import yaml
 
+# Get the project root directory
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
 def find_detection_head(model):
     """Find the detection head layer in a YOLOv8 model"""
     for name, module in model.named_modules():
@@ -38,12 +41,94 @@ def verify_yaml_file(yaml_path):
     except yaml.YAMLError:
         raise ValueError(f"Invalid YAML format in file: {yaml_path}")
 
+def find_optimal_batch_size(model, data_yaml_path, imgsz, start_batch=64, min_batch=4):
+    """
+    Find the optimal batch size that maximizes GPU memory usage without OOM errors
+    
+    Args:
+        model: YOLO model instance
+        data_yaml_path: Path to data.yaml file
+        imgsz: Image size for training
+        start_batch: Initial batch size to try
+        min_batch: Minimum acceptable batch size
+        
+    Returns:
+        Optimal batch size
+    """
+    print("Finding optimal batch size for maximum GPU utilization...")
+    
+    if not torch.cuda.is_available():
+        print("CUDA not available, using default batch size")
+        return 16  # Default for CPU
+    
+    batch_size = start_batch
+    
+    # Try binary search approach for finding optimal batch size
+    max_batch = start_batch
+    min_search = min_batch
+    optimal_batch = None
+    
+    while min_search <= max_batch:
+        try:
+            current_batch = (min_search + max_batch) // 2
+            print(f"Trying batch size: {current_batch}")
+            
+            # Create a temporary test model
+            test_model = model.model.deepcopy()
+            
+            # Try to run a single training step with the current batch size
+            # We'll use a very small subset and just 1 iteration to test memory usage
+            torch.cuda.empty_cache()  # Clear GPU memory
+            
+            # Use a dummy training run with just one iteration to test memory
+            model.train(
+                data=data_yaml_path,
+                epochs=1,
+                imgsz=imgsz,
+                batch=current_batch,
+                close_mosaic=0,  # Don't close mosaic
+                exist_ok=True,
+                verbose=False,
+                device=0,
+                fraction=0.01,  # Use just a tiny fraction of data for the test
+                freeze=[0, 1, 2],  # Freeze some layers to save memory in the test
+                val=False,  # Skip validation
+                nbs=64,  # Nominal batch size for scaling
+                _callbacks=None,  # No callbacks to speed up test
+            )
+            
+            # If we got here without an OOM error, try a larger batch size
+            optimal_batch = current_batch
+            min_search = current_batch + 1
+            print(f"Batch size {current_batch} works, trying larger...")
+            
+        except torch.cuda.OutOfMemoryError:
+            # If we got an OOM error, try a smaller batch size
+            print(f"Batch size {current_batch} caused OOM error, trying smaller...")
+            max_batch = current_batch - 1
+            torch.cuda.empty_cache()  # Clear GPU memory
+            
+        except Exception as e:
+            # For other errors, try a smaller batch size as well
+            print(f"Error with batch size {current_batch}: {str(e)}")
+            max_batch = current_batch - 1
+            torch.cuda.empty_cache()  # Clear GPU memory
+    
+    # If we couldn't find a working batch size, use the minimum
+    if optimal_batch is None:
+        optimal_batch = min_batch
+        print(f"Could not find optimal batch size, using minimum: {min_batch}")
+    else:
+        print(f"Found optimal batch size: {optimal_batch}")
+    
+    return optimal_batch
+
 if __name__ == '__main__':
     try:
-        # Fixed parameters (no command line options)
-        ckpt_path = 'saved/yolov8_uec_food100/weights/best.pt'
-        data_yaml_path = 'data/UEC_Food_256/yolo/data.yaml'
-        base_model = 'yolov8s.pt'
+        # Fixed parameters with absolute paths
+        ckpt_path = os.path.join(PROJECT_ROOT, 'saved', 'yolov8_uec_food100', 'weights', 'best.pt')
+        data_yaml_path = os.path.join(PROJECT_ROOT, 'data', 'UEC_Food_256', 'yolo', 'data.yaml')
+        base_model = os.path.join(PROJECT_ROOT, 'yolov8s.pt')
         experiment_name = 'yolov8_uec_food256_expanded'
         
         # Verify checkpoint exists
@@ -81,19 +166,24 @@ if __name__ == '__main__':
         print(f"Model loaded with weights transferred from checkpoint (excluding {detection_head})")
         
         # Create output directory if it doesn't exist
-        output_dir = os.path.join('saved', experiment_name)
+        output_dir = os.path.join(PROJECT_ROOT, 'saved', experiment_name)
         os.makedirs(output_dir, exist_ok=True)
+        
+        # Find the optimal batch size
+        imgsz = 640
+        optimal_batch = find_optimal_batch_size(model, data_yaml_path, imgsz, start_batch=64, min_batch=4)
+        print(f"Training with dynamically determined optimal batch size: {optimal_batch}")
         
         # Train the model on the 256-class dataset
         results = model.train(
             data=data_yaml_path,              # Path to dataset YAML
-            epochs=30,                        # Number of epochs
-            imgsz=640,                        # Image size
-            batch=16,                         # Batch size
-            project='saved',                  # Project directory
+            epochs=1,                          # Number of epochs
+            imgsz=imgsz,                      # Image size
+            batch=optimal_batch,              # Use dynamically determined batch size
+            project=os.path.join(PROJECT_ROOT, 'saved'),  # Project directory (absolute path)
             name=experiment_name,             # Run name
             exist_ok=True,                    # Overwrite existing project
-            patience=2,                      # Early stopping patience
+            patience=2,                       # Early stopping patience
             save_period=5,                    # Save checkpoint every 5 epochs
             lr0=0.01,                         # Initial learning rate
             lrf=0.001,                        # Final learning rate

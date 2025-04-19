@@ -3,9 +3,10 @@ import shutil
 import random
 from PIL import Image
 import argparse
-from tqdm import tqdm  # Add tqdm import
+import sys
+from tqdm import tqdm
 
-def convert_uec_to_yolo(dataset="UEC_Food_100"):
+def convert_uec_to_yolo(dataset="UEC_Food_256"):
     # Use absolute paths and forward slashes, fix folder name
     SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
     DATA_DIR = os.path.join(SCRIPT_DIR, 'data')
@@ -41,7 +42,9 @@ def convert_uec_to_yolo(dataset="UEC_Food_100"):
 
     # 2. Process each class folder and collect all image-label pairs
     img_label_pairs = []
-    for class_idx in range(1, len(class_names) + 1):
+    class_count = len(class_names) + 1
+    for class_idx in tqdm(range(1, class_count), desc="Processing classes", unit="class", 
+                          position=0, leave=True, dynamic_ncols=True):
         class_folder = os.path.join(SRC_ROOT, str(class_idx)).replace('\\', '/')
         bb_file = os.path.join(class_folder, 'bb_info.txt').replace('\\', '/')
         if not os.path.exists(bb_file):
@@ -84,13 +87,18 @@ def convert_uec_to_yolo(dataset="UEC_Food_100"):
         os.makedirs(os.path.join(DST_LABELS, split), exist_ok=True)
 
     # Copy and write files
-    for split, pairs in [('train', train_pairs), ('val', val_pairs)]:
-        for img_file, new_img_name, label_content in tqdm(pairs, desc=f'Processing {split}', unit='img'):
-            dst_img_path = os.path.join(DST_IMAGES, split, new_img_name).replace('\\', '/')
-            dst_label_path = os.path.join(DST_LABELS, split, new_img_name.replace('.jpg', '.txt')).replace('\\', '/')
-            shutil.copyfile(img_file, dst_img_path)
-            with open(dst_label_path, 'w') as lf:
-                lf.write(label_content)
+    print(f"\nSplitting dataset: {len(train_pairs)} training images, {len(val_pairs)} validation images")
+    for position, (split, pairs) in enumerate([('train', train_pairs), ('val', val_pairs)]):
+        with tqdm(total=len(pairs), desc=f"Processing {split}", unit="img", 
+                 position=position, leave=True, dynamic_ncols=True, 
+                 file=sys.stdout) as pbar:
+            for img_file, new_img_name, label_content in pairs:
+                dst_img_path = os.path.join(DST_IMAGES, split, new_img_name).replace('\\', '/')
+                dst_label_path = os.path.join(DST_LABELS, split, new_img_name.replace('.jpg', '.txt')).replace('\\', '/')
+                shutil.copyfile(img_file, dst_img_path)
+                with open(dst_label_path, 'w') as lf:
+                    lf.write(label_content)
+                pbar.update(1)
 
     # 3. Write data.yaml
     yaml_path = os.path.join(DATA_DIR, dataset, 'yolo', 'data.yaml').replace('\\', '/')
@@ -107,7 +115,7 @@ def convert_uec_to_yolo(dataset="UEC_Food_100"):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Convert UEC Food dataset to YOLO format')
-    parser.add_argument('--dataset', type=str, default='UEC_Food_100', 
+    parser.add_argument('--dataset', type=str, default='UEC_Food_256', 
                         choices=['UEC_Food_100', 'UEC_Food_256'],
                         help='Dataset to convert: UEC_Food_100 or UEC_Food_256')
     args = parser.parse_args()
